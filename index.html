@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendrier de disponibilités</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f4ef;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #8a8278;
+    --border: #e8e2d9;
+    --airbnb1: #FF5A5F;
+    --airbnb2: #7B2D8B;
+    --today-ring: #1a1a1a;
+    --shadow: 0 2px 24px rgba(0,0,0,0.07);
+    --header-h: 44px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  /* ── Sticky header ─────────────────────────────────────────────────────── */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--header-h);
+    background: rgba(247,244,239,0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+  }
+
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.ok   { background: #3a9e3a; }
+  .status-dot.warn { background: #e8a020; }
+  .status-dot.err  { background: var(--airbnb1); }
+
+  .refresh-btn {
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { background: var(--text); color: #fff; border-color: var(--text); }
+
+  #airbnb1Url, #airbnb2Url { display: none; }
+
+  /* ── Main content ──────────────────────────────────────────────────────── */
+  .page {
+    padding-top: calc(var(--header-h) + 16px);
+    padding-bottom: 120px;
+    min-height: 100vh;
+  }
+
+  /* ── Month navigation bar ──────────────────────────────────────────────── */
+  .cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 10px;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  .cal-nav h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-transform: capitalize;
+    text-align: center;
+    flex: 1;
+  }
+
+  .nav-btn {
+    width: 36px; height: 36px;
+    border: 1.5px solid var(--border);
+    background: var(--card);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+    color: var(--text);
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-btn:hover, .nav-btn:active { background: var(--text); color: #fff; border-color: var(--text); }
+
+  /* ── Swipe viewport ────────────────────────────────────────────────────── */
+  .swipe-viewport {
+    overflow: hidden;
+    position: relative;
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 0 12px;
+    touch-action: pan-y;
+  }
+
+  .swipe-track {
+    display: flex;
+    width: 100%;
+    will-change: transform;
+    transform: translateX(-100%);
+  }
+
+  .swipe-track.snapping {
+    transition: transform 0.32s cubic-bezier(0.35, 0, 0.25, 1);
+  }
+
+  .month-slide {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+
+  /* ── Month card ────────────────────────────────────────────────────────── */
+  .month-card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 20px 16px 16px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+
+  .weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 6px;
+  }
+
+  .weekday {
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--muted);
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+  }
+
+  .day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    font-size: 0.82rem;
+    font-weight: 400;
+    position: relative;
+    cursor: default;
+    user-select: none;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .day.empty { background: transparent; }
+  .day.free  { background: #eef7ee; color: #2d6e2d; }
+
+  .day.booked-airbnb1 { background: var(--airbnb1); color: #fff; font-weight: 500; }
+  .day.booked-airbnb2 { background: var(--airbnb2); color: #fff; font-weight: 500; }
+
+  .day.blocked-airbnb1 {
+    background: repeating-linear-gradient(135deg,#ffd0d2 0px,#ffd0d2 4px,#fff0f0 4px,#fff0f0 8px);
+    color: #c0666a; font-size: 0.72rem;
+  }
+  .day.blocked-airbnb2 {
+    background: repeating-linear-gradient(135deg,#ddbfea 0px,#ddbfea 4px,#f5eef8 4px,#f5eef8 8px);
+    color: #6a2a80; font-size: 0.72rem;
+  }
+  .day.blocked-both {
+    background: repeating-linear-gradient(135deg,#e0d0e8 0px,#e0d0e8 4px,#f4eef8 4px,#f4eef8 8px);
+    color: #6a4a8a; font-size: 0.72rem;
+  }
+
+  .day.booked-both {
+    background: repeating-linear-gradient(45deg,var(--airbnb1) 0px,var(--airbnb1) 5px,var(--airbnb2) 5px,var(--airbnb2) 10px);
+    color: #fff; font-weight: 700;
+    animation: pulse-warn 1.8s ease-in-out infinite;
+  }
+  .day.booked-both::before {
+    content: '!';
+    position: absolute; top: 1px; right: 3px;
+    font-size: 0.5rem; font-weight: 900;
+    color: #fff; line-height: 1;
+  }
+
+  @keyframes pulse-warn {
+    0%,100% { box-shadow: 0 0 0 2px #c0392b, 0 0 6px rgba(192,57,43,0.3); }
+    50%      { box-shadow: 0 0 0 3px #c0392b, 0 0 14px rgba(192,57,43,0.55); }
+  }
+
+  .day.today { box-shadow: 0 0 0 2px var(--today-ring); }
+  .day.today.booked-both { box-shadow: 0 0 0 2px #c0392b, 0 0 0 4px var(--today-ring); }
+  .day.past  { opacity: 0.32; }
+
+  /* Tooltip */
+  .day[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%; transform: translateX(-50%);
+    background: var(--text); color: #fff;
+    font-size: 0.66rem; padding: 3px 7px;
+    border-radius: 5px; white-space: nowrap;
+    z-index: 10; pointer-events: none;
+  }
+
+  /* ── Stats strip ───────────────────────────────────────────────────────── */
+  .stats-strip {
+    max-width: 500px;
+    margin: 12px auto 0;
+    padding: 0 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .stat-chip {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    flex: 1;
+    min-width: 72px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+    text-align: center;
+  }
+
+  .stat-chip .num {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  .stat-chip .lbl {
+    font-size: 0.62rem;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  .num.airbnb1-c { color: var(--airbnb1); }
+  .num.airbnb2-c { color: var(--airbnb2); }
+  .num.free-c    { color: #3a9e3a; }
+  .num.warn-c    { color: #c0392b; }
+
+  .stat-chip.warn-chip { border-color: #f5c6c6; background: #fff8f8; }
+
+  /* ── Legend footer ─────────────────────────────────────────────────────── */
+  .legend-footer {
+    max-width: 500px;
+    margin: 32px auto 0;
+    padding: 16px 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-title {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .legend-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.76rem;
+    color: var(--muted);
+  }
+
+  .legend-swatch {
+    width: 24px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .ls-airbnb1       { background: var(--airbnb1); }
+  .ls-airbnb2       { background: var(--airbnb2); }
+  .ls-airbnb1-block { background: repeating-linear-gradient(135deg,#ffd0d2 0px,#ffd0d2 4px,#fff0f0 4px,#fff0f0 8px); border:1px solid #f5b0b3; }
+  .ls-airbnb2-block { background: repeating-linear-gradient(135deg,#ddbfea 0px,#ddbfea 4px,#f5eef8 4px,#f5eef8 8px); border:1px solid #c89fda; }
+  .ls-both {
+    background: repeating-linear-gradient(45deg,var(--airbnb1) 0px,var(--airbnb1) 5px,var(--airbnb2) 5px,var(--airbnb2) 10px);
+    outline: 2px solid #c0392b; outline-offset: 1px;
+  }
+  .ls-free { background: #d4f0d4; border: 1px solid #b5deb5; }
+
+  /* ── Loading overlay ───────────────────────────────────────────────────── */
+  .loading-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(247,244,239,0.75);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    color: var(--muted);
+  }
+  .loading-overlay.show { display: flex; }
+
+  .spinner {
+    width: 22px; height: 22px;
+    border: 2px solid var(--border);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Airbnb compte 1 -->
+<input type="url" id="airbnb1Url"
+  value="https://www.airbnb.com/calendar/ical/46651929.ics?t=01969940675b4ead9acd7622f06c9c54&locale=en" />
+<!-- Airbnb compte 2 -->
+<input type="url" id="airbnb2Url"
+  value="https://www.airbnb.com/calendar/ical/16766373.ics?t=86e7c1bff36f4fa98832fc24c00db2d5&locale=en" />
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  Synchronisation…
+</div>
+
+<!-- Sticky header -->
+<header>
+  <h1>Calendrier de location</h1>
+  <div class="header-right">
+    <div class="status-dot" id="statusDot"></div>
+    <button class="refresh-btn" onclick="syncCalendars()">↻ Actualiser</button>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- Month nav -->
+  <div class="cal-nav">
+    <button class="nav-btn" onclick="navigate(-1)">‹</button>
+    <h2 id="monthLabel"></h2>
+    <button class="nav-btn" onclick="navigate(1)">›</button>
+  </div>
+
+  <!-- Swipe viewport: 3 slides (prev | current | next) -->
+  <div class="swipe-viewport" id="swipeViewport">
+    <div class="swipe-track" id="swipeTrack">
+      <div class="month-slide" id="slidePrev"></div>
+      <div class="month-slide" id="slideCur"></div>
+      <div class="month-slide" id="slideNext"></div>
+    </div>
+  </div>
+
+  <!-- Stats for current month only -->
+  <div class="stats-strip" id="statsStrip"></div>
+
+  <!-- Legend at the very bottom -->
+  <div class="legend-footer">
+    <div class="legend-title">Légende</div>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-swatch ls-airbnb1"></div> Résa Airbnb (cpte 1)</div>
+      <div class="legend-item"><div class="legend-swatch ls-airbnb2"></div> Résa Airbnb (cpte 2)</div>
+      <div class="legend-item"><div class="legend-swatch ls-airbnb1-block"></div> Bloqué Airbnb (cpte 1)</div>
+      <div class="legend-item"><div class="legend-swatch ls-airbnb2-block"></div> Bloqué Airbnb (cpte 2)</div>
+      <div class="legend-item"><div class="legend-swatch ls-both"></div> Surbooking ⚠</div>
+      <div class="legend-item"><div class="legend-swatch ls-free"></div> Disponible</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Constants & state ──────────────────────────────────────────────────────
+const PROXY = "/.netlify/functions/ical-proxy?url=";
+let bookedDates = {};
+let viewOffset  = 0;
+
+const today = new Date();
+today.setHours(0,0,0,0);
+
+function setStatus(s) {
+  const dot = document.getElementById("statusDot");
+  dot.className = "status-dot" + (s ? " " + s : "");
+}
+
+// ── Classification helpers ─────────────────────────────────────────────────
+function isRealReservation(summary) {
+  if (!summary) return false;
+  const s = summary.trim();
+  const blocked = [/not available/i,/blocked/i,/unavailable/i,/owner/i,/maintenance/i,/travaux/i,/entretien/i,/\(not available\)/i,/^closed$/i];
+  if (blocked.some(p => p.test(s))) return false;
+  // Airbnb confirmation codes: typically alphanumeric 9-12 chars
+  if (/^[A-Z0-9]{6,12}$/.test(s)) return true;
+  if (/\b[A-Z0-9]{9,12}\b/.test(s)) return true;
+  return true;
+}
+
+function getDisplayStatus(entry) {
+  if (!entry) return 'free';
+  const { airbnb1, airbnb2 } = entry;
+  if (airbnb1 === 'resa' && airbnb2 === 'resa') return 'overbooking';
+  if (airbnb1 === 'resa')    return 'airbnb1-resa';
+  if (airbnb2 === 'resa')    return 'airbnb2-resa';
+  if (airbnb1 === 'block' && airbnb2 === 'block') return 'both-block';
+  if (airbnb1 === 'block')   return 'airbnb1-block';
+  if (airbnb2 === 'block')   return 'airbnb2-block';
+  return 'free';
+}
+
+// ── iCal parsing ───────────────────────────────────────────────────────────
+function parseICalDate(str) {
+  const s = str.trim().replace(/Z$/, '');
+  return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
+}
+
+function parseICal(text, source) {
+  const lines = text.replace(/\r\n[ \t]/g, '').split(/\r?\n/);
+  let inEvent=false, dtStart=null, dtEnd=null, summary='';
+  for (const line of lines) {
+    if (line === "BEGIN:VEVENT") { inEvent=true; dtStart=null; dtEnd=null; summary=''; }
+    if (!inEvent) continue;
+    if (line.startsWith("DTSTART")) dtStart = parseICalDate(line.split(":")[1]);
+    if (line.startsWith("DTEND"))   dtEnd   = parseICalDate(line.split(":")[1]);
+    if (line.startsWith("SUMMARY")) summary = line.replace(/^SUMMARY[;:]/, '').trim();
+    if (line === "END:VEVENT" && dtStart && dtEnd) {
+      const kind = isRealReservation(summary) ? 'resa' : 'block';
+      for (let d = new Date(dtStart); d < dtEnd; d.setDate(d.getDate()+1)) {
+        const key = dateKey(d);
+        if (!bookedDates[key]) bookedDates[key] = { airbnb1:null, airbnb2:null, summaries:[] };
+        bookedDates[key][source] = kind;
+        if (summary) bookedDates[key].summaries.push(`[${source}] ${summary}`);
+      }
+      inEvent = false;
+    }
+  }
+}
+
+async function fetchICal(url, source) {
+  const resp = await fetch(PROXY + encodeURIComponent(url));
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  parseICal(await resp.text(), source);
+}
+
+// ── Sync ───────────────────────────────────────────────────────────────────
+async function syncCalendars() {
+  const url1 = document.getElementById("airbnb1Url").value.trim();
+  const url2 = document.getElementById("airbnb2Url").value.trim();
+  document.getElementById("loadingOverlay").classList.add("show");
+  setStatus("");
+  bookedDates = {};
+  const errors=[], tasks=[];
+  if (url1) tasks.push(fetchICal(url1, "airbnb1").catch(e => errors.push(e.message)));
+  if (url2) tasks.push(fetchICal(url2, "airbnb2").catch(e => errors.push(e.message)));
+  await Promise.all(tasks);
+  document.getElementById("loadingOverlay").classList.remove("show");
+  const conflicts = Object.values(bookedDates).filter(e => getDisplayStatus(e) === 'overbooking').length;
+  if (errors.length)    setStatus("err");
+  else if (conflicts>0) setStatus("warn");
+  else                  setStatus("ok");
+  renderAll();
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function firstOfMonth(offset) {
+  return new Date(today.getFullYear(), today.getMonth() + offset, 1);
+}
+
+function monthLabel(d) {
+  const s = d.toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+function buildMonthCard(firstDay) {
+  const card = document.createElement("div");
+  card.className = "month-card";
+
+  const wds = document.createElement("div");
+  wds.className = "weekdays";
+  ['Lu','Ma','Me','Je','Ve','Sa','Di'].forEach(d => {
+    const el = document.createElement("div");
+    el.className = "weekday";
+    el.textContent = d;
+    wds.appendChild(el);
+  });
+  card.appendChild(wds);
+
+  const g = document.createElement("div");
+  g.className = "days-grid";
+
+  const dow = (firstDay.getDay() + 6) % 7;
+  for (let i=0; i<dow; i++) {
+    const e = document.createElement("div"); e.className="day empty"; g.appendChild(e);
+  }
+
+  const dim = new Date(firstDay.getFullYear(), firstDay.getMonth()+1, 0).getDate();
+  for (let d=1; d<=dim; d++) {
+    const date   = new Date(firstDay.getFullYear(), firstDay.getMonth(), d);
+    const key    = dateKey(date);
+    const isPast = date < today;
+    const isToday= key === dateKey(today);
+    const entry  = bookedDates[key];
+    const status = getDisplayStatus(entry);
+    const raw    = entry?.summaries?.join(' / ') || '';
+
+    const el = document.createElement("div");
+    el.className = "day";
+    if (isPast)  el.classList.add("past");
+    if (isToday) el.classList.add("today");
+
+    switch (status) {
+      case 'airbnb1-resa':  el.classList.add("booked-airbnb1");  el.dataset.tip="Réservation Airbnb (cpte 1)"; break;
+      case 'airbnb2-resa':  el.classList.add("booked-airbnb2");  el.dataset.tip="Réservation Airbnb (cpte 2)"; break;
+      case 'overbooking':   el.classList.add("booked-both");     el.dataset.tip="⚠ Surbooking !"; break;
+      case 'airbnb1-block': el.classList.add("blocked-airbnb1"); el.dataset.tip="Bloqué Airbnb (cpte 1)"+(raw?` · ${raw}`:''); break;
+      case 'airbnb2-block': el.classList.add("blocked-airbnb2"); el.dataset.tip="Bloqué Airbnb (cpte 2)"+(raw?` · ${raw}`:''); break;
+      case 'both-block':    el.classList.add("blocked-both");    el.dataset.tip="Bloqué (2 comptes)"; break;
+      default:              el.classList.add("free");
+    }
+    el.textContent = d;
+    g.appendChild(el);
+  }
+  card.appendChild(g);
+  return card;
+}
+
+function renderSlide(el, offset) {
+  el.innerHTML = '';
+  el.appendChild(buildMonthCard(firstOfMonth(offset)));
+}
+
+function buildStats(firstDay) {
+  const from = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1);
+  const to   = new Date(firstDay.getFullYear(), firstDay.getMonth()+1, 0);
+  let a1=0, a2=0, over=0, free=0;
+  for (let d=new Date(from); d<=to; d.setDate(d.getDate()+1)) {
+    const s = getDisplayStatus(bookedDates[dateKey(d)]);
+    if      (s==='airbnb1-resa') a1++;
+    else if (s==='airbnb2-resa') a2++;
+    else if (s==='overbooking')  over++;
+    else if (d >= today)         free++;
+  }
+  const tA1 = a1+over, tA2 = a2+over;
+  const occ = Math.round((tA1+tA2)/(tA1+tA2+free||1)*100);
+  document.getElementById("statsStrip").innerHTML = `
+    <div class="stat-chip"><div class="num airbnb1-c">${tA1}</div><div class="lbl">Nuits<br>Airbnb 1</div></div>
+    <div class="stat-chip"><div class="num airbnb2-c">${tA2}</div><div class="lbl">Nuits<br>Airbnb 2</div></div>
+    <div class="stat-chip"><div class="num free-c">${free}</div><div class="lbl">Nuits<br>libres</div></div>
+    <div class="stat-chip"><div class="num">${occ}%</div><div class="lbl">Taux<br>d'occup.</div></div>
+    ${over>0?`<div class="stat-chip warn-chip"><div class="num warn-c">${over}</div><div class="lbl">⚠ Sur-<br>booking</div></div>`:''}
+  `;
+}
+
+function renderAll() {
+  renderSlide(document.getElementById('slidePrev'), viewOffset-1);
+  renderSlide(document.getElementById('slideCur'),  viewOffset);
+  renderSlide(document.getElementById('slideNext'), viewOffset+1);
+  document.getElementById('monthLabel').textContent = monthLabel(firstOfMonth(viewOffset));
+  buildStats(firstOfMonth(viewOffset));
+  // Reset track to center without animation
+  const track = document.getElementById('swipeTrack');
+  track.classList.remove('snapping');
+  track.style.transform = 'translateX(-100%)';
+}
+
+function navigate(dir) {
+  viewOffset += dir;
+  renderAll();
+}
+
+// ── Swipe support ──────────────────────────────────────────────────────────
+(function() {
+  const vp    = document.getElementById('swipeViewport');
+  const track = document.getElementById('swipeTrack');
+  let startX=0, startY=0, dx=0, dragging=false, lockAxis=null;
+
+  vp.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dx=0; dragging=true; lockAxis=null;
+    track.classList.remove('snapping');
+  }, {passive:true});
+
+  vp.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const cx = e.touches[0].clientX;
+    const cy = e.touches[0].clientY;
+    if (!lockAxis) {
+      lockAxis = Math.abs(cx-startX) > Math.abs(cy-startY) ? 'x' : 'y';
+    }
+    if (lockAxis === 'y') return;
+    e.preventDefault();
+    dx = cx - startX;
+    track.style.transform = `translateX(calc(-100% + ${dx}px))`;
+  }, {passive:false});
+
+  vp.addEventListener('touchend', () => {
+    if (!dragging || lockAxis !== 'x') { dragging=false; return; }
+    dragging=false;
+    track.classList.add('snapping');
+    const W = vp.offsetWidth;
+    if (dx < -W*0.25)      { viewOffset++; renderAll(); }
+    else if (dx > W*0.25)  { viewOffset--; renderAll(); }
+    else { track.style.transform = 'translateX(-100%)'; }
+  });
+})();
+
+// ── Init ───────────────────────────────────────────────────────────────────
+syncCalendars();
+</script>
+</body>
+</html>
